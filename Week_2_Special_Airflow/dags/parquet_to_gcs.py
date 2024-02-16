@@ -4,10 +4,11 @@ import logging
 
 from airflow import DAG
 from airflow.utils.dates import days_ago
+from airflow.models.param import Param
 
 # Import our operators
-from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+
 
 # We installed the following from the requirements file which was specified in the Dockerfile.
 
@@ -33,8 +34,6 @@ BUCKET = os.environ.get("GCP_GCS_BUCKET")
 # Store environmental variables (in your docker container) locally. The second argument of each `.get` is what it will default to if it's empty.
 path_to_local_home = os.environ.get("AIRFLOW_HOME", "/opt/airflow/")
 BIGQUERY_DATASET = os.environ.get("BIGQUERY_DATASET", 'trips_green_taxi_data')
-dataset_file = "green_taxi_2022"
-
 
 default_args = {
     "owner": "airflow",
@@ -51,12 +50,19 @@ with DAG(
     catchup=False,
     max_active_runs=1,
     tags=['dtc-de'],
+    params={
+         "type": "green",
+         "year": "2020"
+        },
 ) as dag:
 
     download_operator_task = PythonOperator(
     task_id='download_green_taxi_data_task',
     python_callable=op.load_transform_parquet,
-    op_kwargs={'save_path': path_to_local_home}
+    op_kwargs={
+        'type': "{{ params.type }}",
+        'year': "{{ params.year }}",
+        }
     )   
 
     upload_operator_task = PythonOperator(
@@ -65,6 +71,7 @@ with DAG(
         op_kwargs={
             "bucket_name": BUCKET,
             "folder_path": path_to_local_home,
+            "file_name": f"{{{{params.type}}}}_taxi_{{{{params.year}}}}.parquet"
         }
     )
 
